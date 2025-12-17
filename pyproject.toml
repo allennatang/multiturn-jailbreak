@@ -1,0 +1,29 @@
+[project]
+name = "jailbreak"
+version = "0.1.0"
+description = "Prompt runner for single-turn and multi-turn jailbreak experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic>=2.6",
+  "typer>=0.12",
+  "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.5",
+  "mypy>=1.8",
+  "pre-commit>=3.6",
+]
+
+[project.scripts]
+jailbreak = "jailbreak.cli:app"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
