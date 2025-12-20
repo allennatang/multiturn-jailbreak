@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
 # -----------------------------
 #  Minimal "model interface"
 #  Replace this with vLLM/HF/etc.
@@ -12,6 +15,43 @@ class DummyModel:
         # naive baseline: echoes last user message
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         return f"(DUMMY RESPONSE) You said: {last_user}"
+
+
+class LlamaHFModel:
+    def __init__(self, model_path: str, torch_dtype=torch.bfloat16):
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            use_fast=True,
+            local_files_only=True,   # IMPORTANT if HF blocked
+        )
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch_dtype,
+            device_map="auto",
+            local_files_only=True,   # IMPORTANT if HF blocked
+        )
+        self.model.eval()
+
+    @torch.inference_mode()
+    def generate(self, messages: List[Dict[str, str]], max_new_tokens: int = 256) -> str:
+        # Llama-3 chat formatting
+        input_ids = self.tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(self.model.device)
+
+        out = self.model.generate(
+            input_ids,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,  # deterministic for eval; flip to True if you want sampling
+            eos_token_id=self.tokenizer.eos_token_id,
+        )
+
+        # Only decode the newly generated tokens
+        gen_ids = out[0][input_ids.shape[-1]:]
+        return self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+
 
 # -----------------------------
 #  Heuristic success detector
@@ -111,6 +151,7 @@ def run_multi_turn(model, items, model_name: str, max_new_tokens: int) -> List[D
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model_name", type=str, default="dummy")
+    ap.add_argument("--model_path", type=str, default=None)
     ap.add_argument("--single_path", type=str, default="data/prompts/single_turn.jsonl")
     ap.add_argument("--multi_path", type=str, default="data/prompts/multi_turn.jsonl")
     ap.add_argument("--out_dir", type=str, default="runs/day1")
@@ -120,8 +161,11 @@ def main():
     out_dir = Path(args.out_dir)
     ensure_dir(out_dir)
 
-    # Swap DummyModel with your real model wrapper later
-    model = DummyModel()
+    if args.model_path is None:
+        model = DummyModel()
+    else:
+        model = LlamaHFModel(args.model_path)
+
 
     single_items = read_jsonl(Path(args.single_path))
     multi_items = read_jsonl(Path(args.multi_path))
