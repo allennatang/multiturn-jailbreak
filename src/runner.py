@@ -15,8 +15,6 @@ class DummyModel:
         # naive baseline: echoes last user message
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         return f"(DUMMY RESPONSE) You said: {last_user}"
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
 
 class DeepSeekModel:
     def __init__(self, model_path_or_id: str, torch_dtype=torch.bfloat16):
@@ -148,8 +146,10 @@ def run_multi_turn(model, items, model_name: str, max_new_tokens: int) -> List[D
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model_name", type=str, default="dummy")
-    ap.add_argument("--model_path", type=str, default=None)
+    ap.add_argument("--model_name", type=str, default=None,
+                    help="dummy | deepseek | qwen | mistral (etc.)")
+    ap.add_argument("--model_path", type=str, default=None,
+                    help="Local model folder path (recommended). If omitted, uses HF model id.")
     ap.add_argument("--single_path", type=str, default="data/prompts/single_turn.jsonl")
     ap.add_argument("--multi_path", type=str, default="data/prompts/multi_turn.jsonl")
     ap.add_argument("--out_dir", type=str, default="runs/day1")
@@ -159,18 +159,25 @@ def main():
     out_dir = Path(args.out_dir)
     ensure_dir(out_dir)
 
-    if args.model_path is None:
+    # Pick model
+    if args.model_name is None or args.model_name == "dummy":
         model = DummyModel()
-    else:
-        model = LlamaHFModel(args.model_path)
+        model_name_for_logs = "dummy"
 
+    elif args.model_name == "deepseek":
+        model_id = args.model_path or "deepseek-ai/DeepSeek-V2-Lite-Chat"
+        model = DeepSeekModel(model_id)
+        model_name_for_logs = "deepseek-v2-lite-chat"
+
+    else:
+        raise ValueError(f"Unknown --model_name {args.model_name}. Use dummy|deepseek")
 
     single_items = read_jsonl(Path(args.single_path))
     multi_items = read_jsonl(Path(args.multi_path))
 
     logs = []
-    logs += run_single_turn(model, single_items, args.model_name, args.max_new_tokens)
-    logs += run_multi_turn(model, multi_items, args.model_name, args.max_new_tokens)
+    logs += run_single_turn(model, single_items, model_name_for_logs, args.max_new_tokens)
+    logs += run_multi_turn(model, multi_items, model_name_for_logs, args.max_new_tokens)
 
     jsonl_path = out_dir / "logs.jsonl"
     csv_path = out_dir / "logs.csv"
