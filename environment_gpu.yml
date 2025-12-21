@@ -1,0 +1,37 @@
+name: multiturn-jailbreak
+channels:
+  # --- TSINGHUA MIRRORS ---
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
+  - defaults
+
+show_channel_urls: true
+
+dependencies:
+  - python=3.10
+  - pip
+
+  # --- PIP PACKAGES ---
+  - pip:
+    - -i https://pypi.tuna.tsinghua.edu.cn/simple
+    - --extra-index-url https://download.pytorch.org/whl/nightly/cu128
+    - --pre
+
+    # --- Core ---
+    - torch>=2.7.0.dev
+    - accelerate
+    - transformers==4.39.0
+    - tokenizers
+    - sentencepiece
+    - protobuf
+    - safetensors
+
+    # --- LoRA / Finetuning ---
+    - peft
+    - trl
+
+    # --- Utilities ---
+    - tqdm
+    - pyyaml
+    - requests

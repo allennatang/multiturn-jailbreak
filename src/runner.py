@@ -15,43 +15,41 @@ class DummyModel:
         # naive baseline: echoes last user message
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         return f"(DUMMY RESPONSE) You said: {last_user}"
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 
-
-class LlamaHFModel:
-    def __init__(self, model_path: str, torch_dtype=torch.bfloat16):
+class DeepSeekModel:
+    def __init__(self, model_path_or_id: str, torch_dtype=torch.bfloat16):
         self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path,
+            model_path_or_id,
             use_fast=True,
-            local_files_only=True,   # IMPORTANT if HF blocked
+            local_files_only=False,  # set True if you rsync the model
         )
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            model_path_or_id,
             torch_dtype=torch_dtype,
             device_map="auto",
-            local_files_only=True,   # IMPORTANT if HF blocked
+            local_files_only=False,
         )
         self.model.eval()
 
     @torch.inference_mode()
-    def generate(self, messages: List[Dict[str, str]], max_new_tokens: int = 256) -> str:
-        # Llama-3 chat formatting
+    def generate(self, messages, max_new_tokens=256) -> str:
         input_ids = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
             return_tensors="pt",
         ).to(self.model.device)
 
-        out = self.model.generate(
+        output_ids = self.model.generate(
             input_ids,
             max_new_tokens=max_new_tokens,
-            do_sample=False,  # deterministic for eval; flip to True if you want sampling
+            do_sample=False,
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-        # Only decode the newly generated tokens
-        gen_ids = out[0][input_ids.shape[-1]:]
+        gen_ids = output_ids[0][input_ids.shape[-1]:]
         return self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
-
 
 # -----------------------------
 #  Heuristic success detector
